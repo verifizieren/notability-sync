@@ -53,6 +53,11 @@ def load_user(user_id):
 def init_db():
     with app.app_context():
         db.create_all()
+        
+        entries = Entry.query.filter_by(share_token=None).all()
+        for entry in entries:
+            entry.share_token = secrets.token_hex(16)
+        db.session.commit()
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
