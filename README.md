@@ -39,7 +39,7 @@ This project is a web application for managing and sharing Notability links. It 
 
 3. **Access the application:**
 
-   Open your web browser and go to `http://localhost:5000`.
+   Open your web browser and go to `http://localhost:5177`.
 
 ### Configuration
 
