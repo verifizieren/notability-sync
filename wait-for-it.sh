@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Simplified wait-for-it script
 
 host="$1"
 port="$2"

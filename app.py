@@ -10,7 +10,7 @@ import atexit
 import secrets
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = secrets.token_hex(16)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')
 
 # Database configuration
 DB_HOST = os.environ.get("DB_HOST", "db")
@@ -46,37 +46,45 @@ class Entry(db.Model):
         self.schedule_minutes = schedule_minutes
         self.filename = filename
         self.share_token = secrets.token_hex(16)
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
 def init_db():
     with app.app_context():
+        # Create tables
         db.create_all()
         
+        # Migrate existing entries to add share tokens
         entries = Entry.query.filter_by(share_token=None).all()
         for entry in entries:
             entry.share_token = secrets.token_hex(16)
         db.session.commit()
 
+# Registration route – allowed only if no user exists
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         
+        # Check if username is empty
         if not username:
             flash('Username is required', 'error')
             return redirect(url_for('register'))
             
+        # Check if password is empty
         if not password:
             flash('Password is required', 'error')
             return redirect(url_for('register'))
         
+        # Check if username already exists
         if User.query.filter_by(username=username).first():
             flash('Username already exists', 'error')
             return redirect(url_for('register'))
         
+        # Create new user with correct hashing method
         new_user = User(
             username=username,
             password=generate_password_hash(password, method='pbkdf2:sha256')
@@ -94,6 +102,7 @@ def register():
             
     return render_template('register.html')
 
+# Modified login route to redirect to register if no user exists
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if not User.query.first():
@@ -128,6 +137,7 @@ def add_entry():
             notability_link = request.form.get("notability_link", "").strip()
             schedule_minutes = request.form.get("schedule_minutes", "").strip()
             
+            # Validate link
             if not notability_link:
                 flash("Notability link is required", "error")
                 return render_template("add_entry.html")
@@ -136,6 +146,7 @@ def add_entry():
                 flash("Invalid Notability link format", "error")
                 return render_template("add_entry.html")
             
+            # Validate schedule
             try:
                 schedule_minutes = int(schedule_minutes) if schedule_minutes else None
                 if schedule_minutes is not None:
@@ -148,6 +159,7 @@ def add_entry():
                 flash("Invalid schedule minutes value", "error")
                 return render_template("add_entry.html")
             
+            # Create new entry
             new_entry = Entry(
                 user_id=current_user.id,
                 notability_link=notability_link,
@@ -163,11 +175,13 @@ def add_entry():
                 flash("Could not save entry to database", "error")
                 return render_template("add_entry.html")
             
+            # Try initial download
             if download_pdf(new_entry):
                 flash("Entry added and initial download completed", "success")
             else:
                 flash("Entry added but initial download failed", "error")
             
+            # Set up scheduling if specified
             if schedule_minutes:
                 try:
                     add_job_for_entry(new_entry)
@@ -215,10 +229,12 @@ def serve_pdf(entry_id):
 def delete_entry(entry_id):
     entry = Entry.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
     
+    # Remove scheduled job if exists
     job_id = f"entry_{entry.id}"
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
     
+    # Delete PDF file if exists
     if entry.filename and os.path.exists(entry.filename):
         try:
             os.remove(entry.filename)
@@ -230,12 +246,14 @@ def delete_entry(entry_id):
     flash("Entry deleted successfully")
     return redirect(url_for('dashboard'))
 
-# Function to download the PDF from the Notability link
+# Function to download the PDF from the Notability link.
 def download_pdf(entry):
     try:
+        # Validate the link format
         if not entry.notability_link or 'notability.com/n/' not in entry.notability_link:
             raise ValueError("Invalid Notability link format")
         
+        # Extract the note ID from the Notability link
         try:
             note_id = entry.notability_link.split('/')[-1]
             if not note_id:
@@ -243,15 +261,18 @@ def download_pdf(entry):
         except Exception as e:
             raise ValueError(f"Invalid link format: {str(e)}")
         
+        # Construct the download URL
         download_url = f"https://notability.com/n/download/pdf/{note_id}/note_{entry.id}.pdf"
         print(f"Attempting to download from: {download_url}")
         
+        # Create pdfs directory if it doesn't exist
         try:
             if not os.path.exists("pdfs"):
                 os.makedirs("pdfs")
         except Exception as e:
             raise IOError(f"Could not create pdfs directory: {str(e)}")
         
+        # Download the PDF with timeout and headers
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -259,10 +280,12 @@ def download_pdf(entry):
             response = requests.get(download_url, headers=headers, timeout=30)
             response.raise_for_status()
             
+            # Verify the response is actually a PDF
             content_type = response.headers.get('content-type', '')
             if 'application/pdf' not in content_type.lower():
                 raise ValueError(f"Received non-PDF response: {content_type}")
             
+            # Check if response is empty
             if not response.content:
                 raise ValueError("Received empty response from server")
             
@@ -271,6 +294,7 @@ def download_pdf(entry):
         except requests.RequestException as e:
             raise ConnectionError(f"Download failed: {str(e)}")
         
+        # Save the PDF, with error handling for file operations
         filename = f"pdfs/note_{entry.id}.pdf"
         try:
             with open(filename, "wb") as f:
@@ -278,6 +302,7 @@ def download_pdf(entry):
         except IOError as e:
             raise IOError(f"Could not save PDF file: {str(e)}")
         
+        # Update the database entry
         try:
             entry.filename = filename
             db.session.commit()
@@ -318,10 +343,12 @@ def add_job_for_entry(entry):
     if entry.schedule_minutes:
         job_id = f"entry_{entry.id}"
         try:
+            # Remove existing job if it exists
             scheduler.remove_job(job_id)
         except:
             pass
         
+        # Add new job
         scheduler.add_job(
             download_pdf,
             trigger=IntervalTrigger(minutes=entry.schedule_minutes),
@@ -331,8 +358,10 @@ def add_job_for_entry(entry):
         )
         print(f"Scheduled sync every {entry.schedule_minutes} minutes for entry {entry.id}")
 
+# Shutdown scheduler when app stops
 atexit.register(lambda: scheduler.shutdown())
 
+# Add new route for public access
 @app.route('/public/<share_token>')
 def public_pdf(share_token):
     entry = Entry.query.filter_by(share_token=share_token).first_or_404()

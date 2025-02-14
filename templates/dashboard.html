@@ -165,6 +165,67 @@
             border-top: 1px solid #e5e5e7;
         }
 
+        .share-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e5e7;
+        }
+
+        .share-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            background: #f5f5f7;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .share-link-label {
+            color: #6e6e73;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .share-link input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #1d1d1f;
+            background: white;
+            width: 100%;
+            cursor: text;
+        }
+
+        .share-link input:focus {
+            outline: none;
+            border-color: #007AFF;
+            box-shadow: 0 0 0 2px rgba(0,122,255,0.2);
+        }
+
+        .copy-button {
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .copy-button:hover {
+            background-color: #0066CC;
+            transform: translateY(-1px);
+        }
+
+        .copy-button:active {
+            transform: translateY(0);
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -178,6 +239,19 @@
 
             .entry-list {
                 grid-template-columns: 1fr;
+            }
+
+            .share-link {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .share-link input {
+                width: 100%;
+            }
+
+            .copy-button {
+                width: 100%;
             }
         }
     </style>
@@ -208,30 +282,57 @@
                     </div>
                     <div class="entry-link">{{ entry.notability_link }}</div>
                     <div class="entry-actions">
-                        <a href="{{ url_for('serve_pdf', entry_id=entry.id) }}" target="_blank">View PDF</a> |
-                        <a href="{{ url_for('sync_entry', entry_id=entry.id) }}">Sync</a>
+                        <a href="{{ url_for('serve_pdf', entry_id=entry.id) }}" target="_blank" class="action-btn">View PDF</a>
+                        <a href="{{ url_for('sync_entry', entry_id=entry.id) }}" class="action-btn">Sync</a>
                         {% if entry.schedule_minutes %}
-                            | Auto-sync: {{ entry.schedule_minutes }} minutes
+                            <span class="sync-info">Auto-sync: {{ entry.schedule_minutes }} minutes</span>
                         {% endif %}
+                        <form style="display: inline" method="POST" action="{{ url_for('delete_entry', entry_id=entry.id) }}"
+                              onsubmit="return confirm('Are you sure you want to delete this entry?');">
+                            <button type="submit" class="action-btn delete">Delete</button>
+                        </form>
+                    </div>
+                    
+                    <div class="share-section">
                         <div class="share-link">
-                            Public Link: 
+                            <span class="share-link-label">Public Link:</span>
                             <input type="text" 
                                    value="{{ request.host_url }}public/{{ entry.share_token }}" 
                                    readonly
-                                   onclick="this.select();"
-                                   style="width: 300px; padding: 4px;">
-                            <button onclick="navigator.clipboard.writeText('{{ request.host_url }}public/{{ entry.share_token }}')">
-                                Copy
+                                   onclick="this.select();">
+                            <button class="copy-button" 
+                                    onclick="copyToClipboard(this, '{{ request.host_url }}public/{{ entry.share_token }}')">
+                                Copy Link
                             </button>
                         </div>
-                        <form style="display: inline" method="POST" action="{{ url_for('delete_entry', entry_id=entry.id) }}"
-                              onsubmit="return confirm('Are you sure you want to delete this entry?');">
-                            <button type="submit">Delete</button>
-                        </form>
                     </div>
                 </li>
             {% endfor %}
         </ul>
     </div>
+
+    <script>
+    function copyToClipboard(button, text) {
+        navigator.clipboard.writeText(text).then(function() {
+            const originalText = button.textContent;
+            button.textContent = 'Copied!';
+            button.style.backgroundColor = '#34C759';
+            
+            setTimeout(function() {
+                button.textContent = originalText;
+                button.style.backgroundColor = '#007AFF';
+            }, 2000);
+        }).catch(function(err) {
+            console.error('Failed to copy text: ', err);
+            button.textContent = 'Failed to copy';
+            button.style.backgroundColor = '#FF3B30';
+            
+            setTimeout(function() {
+                button.textContent = 'Copy Link';
+                button.style.backgroundColor = '#007AFF';
+            }, 2000);
+        });
+    }
+    </script>
 </body>
 </html>
