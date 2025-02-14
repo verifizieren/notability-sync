@@ -7,9 +7,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import atexit
+import secrets
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')
+app.config['SECRET_KEY'] = secrets.token_hex(16)
 
 # Database configuration
 DB_HOST = os.environ.get("DB_HOST", "db")
@@ -37,13 +38,14 @@ class Entry(db.Model):
     notability_link = db.Column(db.String(500))
     schedule_minutes = db.Column(db.Integer, nullable=True)
     filename = db.Column(db.String(200))
+    share_token = db.Column(db.String(32), unique=True)
 
     def __init__(self, user_id, notability_link, schedule_minutes=None, filename=""):
         self.user_id = user_id
         self.notability_link = notability_link
         self.schedule_minutes = schedule_minutes
         self.filename = filename
-
+        self.share_token = secrets.token_hex(16)
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -325,6 +327,15 @@ def add_job_for_entry(entry):
         print(f"Scheduled sync every {entry.schedule_minutes} minutes for entry {entry.id}")
 
 atexit.register(lambda: scheduler.shutdown())
+
+@app.route('/public/<share_token>')
+def public_pdf(share_token):
+    entry = Entry.query.filter_by(share_token=share_token).first_or_404()
+    
+    if entry.filename and os.path.exists(entry.filename):
+        return send_file(entry.filename)
+    else:
+        return "PDF not found", 404
 
 if __name__ == '__main__':
     init_db()
