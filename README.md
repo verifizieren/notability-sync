@@ -39,7 +39,7 @@ This project is a web application for managing and sharing Notability links. It 
 
 3. **Access the application:**
 
-   Open your web browser and go to `http://localhost:5177`.
+   Open your web browser and go to `http://localhost:5177` or `https://nsync.mendes.dev`.
 
 ### Configuration
 
@@ -64,4 +64,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Contact
 
-For any questions or feedback, please contact [your-email@example.com](mailto:max@mendes.dev). 
+For any questions or feedback, please contact [max@mendes.dev](mailto:max@mendes.dev). 
